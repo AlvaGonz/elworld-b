@@ -5,6 +5,10 @@ import json
 from pathlib import Path
 from datetime import datetime
 
+import torch.nn as nn
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+import torch.ao.quantization as quant
+
 from elworld.model.memory import MemoryModel
 
 
@@ -26,34 +30,47 @@ class MemoryTrainer:
         self.best_model_dir.mkdir(parents=True, exist_ok=True)
         
         self.model = MemoryModel(
-            vocab_size=memory_config['vocab_size'],
-            block_size=memory_config['block_size'],
-            n_emb=memory_config['n_emb'],
-            num_layers=memory_config['num_layers'],
-            num_heads=memory_config['num_heads'],
-            dropout=memory_config['dropout'],
-            action_dim=memory_config['action_dim']
+            vocab_size=memory_config.get('vocab_size', 512),
+            context_frames=memory_config.get('context_frames', 4),
+            embed_dim=memory_config.get('embed_dim', 64),
+            hidden_dim=memory_config.get('hidden_dim', 256),
+            num_res_blocks=memory_config.get('num_res_blocks', 6),
+            action_dim=memory_config.get('action_dim', 22)
         ).to(device)
         
+        # Setup optimizer and scheduler
         self.optimizer = torch.optim.AdamW(
-            self.model.parameters(),
-            lr=memory_config['learning_rate']
+            self.model.parameters(), 
+            lr=memory_config['learning_rate'], 
+            weight_decay=0.01
+        )
+        
+        self.scheduler = ReduceLROnPlateau(
+            self.optimizer, 
+            mode='min', 
+            factor=0.5, 
+            patience=10, 
+            verbose=True
         )
         
         # GradScaler for AMP
         self.use_amp = torch.cuda.is_available()
-        self.scaler = torch.cuda.amp.GradScaler() if self.use_amp else None
         
-        # Learning rate scheduler
-        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer,
-            mode='min',
-            factor=0.5,
-            patience=10
-        )
+        # Configuration setup
+        self.num_epochs = memory_config.get('num_epochs', 200)
+        self.batch_size = memory_config.get('batch_size', 32)
         
-        self.num_epochs = memory_config['num_epochs']
-        self.batch_size = memory_config['batch_size']
+        # QAT Support
+        self.use_qat = memory_config.get("use_qat", False)
+        if self.use_qat:
+            print("  [QAT] Initializing Quantization-Aware Training...")
+            self.model.prepare_qat()
+            # PyTorch's QAT FakeQuantize modules do not natively support FP16 autocast yet
+            if self.use_amp:
+                print("  [WARN] Disabling AMP (Mixed Precision) because QAT is enabled and requires FP32.")
+                self.use_amp = False
+                
+        self.scaler = torch.amp.GradScaler('cuda') if self.use_amp else None
         
         # Track best model
         self.best_loss = float('inf')
@@ -75,7 +92,7 @@ class MemoryTrainer:
         print(f"Batch Size: {self.batch_size}")
         print(f"Learning Rate: {memory_config['learning_rate']}")
         print(f"Total Epochs: {self.num_epochs}")
-        print(f"Block Size: {memory_config['block_size']}")
+        print(f"Context Frames: {memory_config.get('context_frames', 4)}")
         print(f"Vocab Size: {memory_config['vocab_size']}")
         print(f"{'='*60}\n")
 
@@ -85,7 +102,7 @@ class MemoryTrainer:
         if self.best_model_dir.exists():
             metadata_path = self.best_model_dir / "training_info.json"
             if metadata_path.exists():
-                with open(metadata_path, 'r') as f:
+                with open(metadata_path, 'r', encoding='utf-8') as f:
                     metadata = json.load(f)
                 self.best_loss = metadata.get('best_loss', float('inf'))
                 self.best_epoch = metadata.get('best_epoch', 0)
@@ -100,7 +117,7 @@ class MemoryTrainer:
             
             metadata_path = latest_checkpoint / "training_info.json"
             if metadata_path.exists():
-                with open(metadata_path, 'r') as f:
+                with open(metadata_path, 'r', encoding='utf-8') as f:
                     metadata = json.load(f)
                 self.start_epoch = metadata.get('epoch', 0)
             print(f"{'='*60}\n")
@@ -145,9 +162,9 @@ class MemoryTrainer:
             epoch_start_time = time.time()
             epoch_loss = 0.0
             
-            print(f"\n{'─'*60}")
+            print(f"\n{'-'*60}")
             print(f"Epoch {epoch+1}/{self.num_epochs}")
-            print(f"{'─'*60}")
+            print(f"{'-'*60}")
             
             if torch.cuda.is_available():
                 torch.cuda.reset_peak_memory_stats()
@@ -160,19 +177,9 @@ class MemoryTrainer:
                 batch_start = time.time()
                 
                 # Get batch data
-                input_tokens = batch['input_tokens'].to(self.device, non_blocking=True)  # [B, seq_len, 768]
-                actions = batch['actions'].to(self.device, non_blocking=True)  # [B, seq_len, action_dim]
-                target_tokens = batch['target_tokens'].to(self.device, non_blocking=True)  # [B, seq_len, 768]
-                
-                # Process each frame in sequence independently
-                # Flatten batch and sequence: [B, seq_len, 768] -> [B*seq_len, 768]
-                B, seq_len, token_len = input_tokens.shape
-                input_tokens_flat = input_tokens.view(B * seq_len, token_len)  # [B*seq_len, 768]
-                target_tokens_flat = target_tokens.view(B * seq_len, token_len)  # [B*seq_len, 768]
-                
-                # Actions: one per frame, expand later in model
-                # [B, seq_len, action_dim] -> [B*seq_len, action_dim]
-                actions_flat = actions.view(B * seq_len, -1)  # [B*seq_len, action_dim]
+                input_tokens = batch['input_tokens'].to(self.device, non_blocking=True)  # [B, context_frames, H, W]
+                actions = batch['actions'].to(self.device, non_blocking=True)            # [B, action_dim]
+                target_tokens = batch['target_tokens'].to(self.device, non_blocking=True)# [B, H, W]
                 
                 self.optimizer.zero_grad(set_to_none=True)
                 
@@ -180,9 +187,9 @@ class MemoryTrainer:
                 if self.use_amp:
                     with torch.amp.autocast('cuda'):
                         output = self.model(
-                            input_tokens_flat,
-                            actions=actions_flat,
-                            targets=target_tokens_flat
+                            input_tokens,
+                            actions=actions,
+                            targets=target_tokens
                         )
                         loss = output['loss']
                     
@@ -191,9 +198,9 @@ class MemoryTrainer:
                     self.scaler.update()
                 else:
                     output = self.model(
-                        input_tokens_flat,
-                        actions=actions_flat,
-                        targets=target_tokens_flat
+                        input_tokens,
+                        actions=actions,
+                        targets=target_tokens
                     )
                     loss = output['loss']
                     
@@ -208,9 +215,9 @@ class MemoryTrainer:
             avg_batch_time = sum(batch_times) / len(batch_times) if batch_times else 0
             current_lr = self.optimizer.param_groups[0]['lr']
             
-            print(f"\n{'─'*60}")
+            print(f"\n{'-'*60}")
             print(f"Epoch {epoch+1}/{self.num_epochs} Summary")
-            print(f"{'─'*60}")
+            print(f"{'-'*60}")
             print(f"Loss:        {avg_loss:.6f}")
             print(f"Learning Rate: {current_lr:.6f}")
             print(f"Time:        {epoch_time:.2f}s (avg batch: {avg_batch_time*1000:.2f}ms)")
@@ -230,14 +237,14 @@ class MemoryTrainer:
             # Save checkpoint
             checkpoint_dir = self.checkpoint_dir / f"memory_model_checkpoint_{epoch+1}"
             self.save_checkpoint_folder(checkpoint_dir, epoch + 1, avg_loss, current_lr, epoch_time)
-            print(f"✓ Checkpoint saved: {checkpoint_dir.name}/")
+            print(f"[OK] Checkpoint saved: {checkpoint_dir.name}/")
             
             # Save best model
             if avg_loss < self.best_loss:
                 self.best_loss = avg_loss
                 self.best_epoch = epoch + 1
                 self.save_checkpoint_folder(self.best_model_dir, epoch + 1, avg_loss, current_lr, epoch_time, is_best=True)
-                print(f"✓ New best model saved! Loss: {avg_loss:.6f}")
+                print(f"[OK] New best model saved! Loss: {avg_loss:.6f}")
             
             print(f"{'─'*60}")
         
@@ -271,14 +278,14 @@ class MemoryTrainer:
             'config': self.memory_config
         }
         
-        with open(folder_path / "training_info.json", 'w') as f:
+        with open(folder_path / "training_info.json", 'w', encoding='utf-8') as f:
             json.dump(metadata, f, indent=2)
         
-        with open(folder_path / "config.json", 'w') as f:
+        with open(folder_path / "config.json", 'w', encoding='utf-8') as f:
             json.dump(self.memory_config, f, indent=2)
         
         # Create README
-        with open(folder_path / "README.md", 'w') as f:
+        with open(folder_path / "README.md", 'w', encoding='utf-8') as f:
             f.write(f"# Memory Model Checkpoint - Epoch {epoch}\n\n")
             f.write(f"## Training Metrics\n\n")
             f.write(f"- **Epoch:** {epoch}\n")
@@ -301,7 +308,7 @@ class MemoryTrainer:
             self.scheduler.load_state_dict(torch.load(folder_path / "scheduler.pth", map_location=self.device))
         
         if (folder_path / "training_info.json").exists():
-            with open(folder_path / "training_info.json", 'r') as f:
+            with open(folder_path / "training_info.json", 'r', encoding='utf-8') as f:
                 metadata = json.load(f)
             
             self.best_loss = metadata.get('best_loss', float('inf'))

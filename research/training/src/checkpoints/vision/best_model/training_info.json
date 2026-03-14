@@ -1,14 +1,14 @@
 {
-  "epoch": 123,
-  "loss": 0.011695462082620381,
-  "recon_loss": 0.006705046073869378,
-  "vq_loss": 0.00499041598974442,
-  "learning_rate": 0.0003,
-  "epoch_time": 209.44878244400024,
-  "best_loss": 0.011695462082620381,
-  "best_epoch": 123,
+  "epoch": 2,
+  "loss": 0.1308097672097537,
+  "recon_loss": 0.1268506622334727,
+  "vq_loss": 0.003959105566475021,
+  "learning_rate": 0.00018638933428187984,
+  "epoch_time": 180.3796808719635,
+  "best_loss": 0.1308097672097537,
+  "best_epoch": 2,
   "is_best": true,
-  "timestamp": "2025-12-12T21:01:15.995989",
+  "timestamp": "2026-03-14T19:35:36.824585",
   "config": {
     "input_channels": 3,
     "latent_dim": 64,
@@ -17,13 +17,16 @@
       192
     ],
     "dropout_rate": 0.1,
-    "learning_rate": 0.0003,
+    "learning_rate": 0.00018638933428187984,
     "commitment_cost": 0.25,
-    "num_embedding": 512,
+    "num_embedding": 1024,
     "num_hidden": 128,
-    "res_layer": 2,
+    "res_layer": 4,
     "res_hidden": 32,
     "batch_size": 128,
-    "num_epochs": 500
+    "num_epochs": 5,
+    "mse_weight": 1.0,
+    "l1_weight": 0.8,
+    "add_noise": true
   }
 }

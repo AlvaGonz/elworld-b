@@ -6,12 +6,15 @@
     192
   ],
   "dropout_rate": 0.1,
-  "learning_rate": 0.0003,
+  "learning_rate": 0.00018638933428187984,
   "commitment_cost": 0.25,
-  "num_embedding": 512,
+  "num_embedding": 1024,
   "num_hidden": 128,
-  "res_layer": 2,
+  "res_layer": 4,
   "res_hidden": 32,
   "batch_size": 128,
-  "num_epochs": 500
+  "num_epochs": 5,
+  "mse_weight": 1.0,
+  "l1_weight": 0.8,
+  "add_noise": true
 }

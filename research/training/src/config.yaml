@@ -1,33 +1,46 @@
 general_config:
-  max_frame: 3900 # Per play
+  max_frame: 3900   # Per play session
   total_play: 5
-  frame_rate: 20
-  data_path: "../recorded/"  # Use reshaped data (256x192)
+  frame_rate: 20    # FPS for recording and video export
+  data_path: "../recorded/"
 
-vision_config: # VAE
-  input_channels: 3 # RGB
-  latent_dim: 64
-  input_size: [256, 192] # [width, height]
+vision_config:  # High-Performance VQ-VAE (Optimized for 20 Epochs)
+  input_channels: 3
+  latent_dim: 64            # Optimized from 128
+  input_size: [256, 192]    # [width, height]
   dropout_rate: 0.1
-  learning_rate: 0.0003
+  learning_rate: 0.00018638933428187984 # Optimized from 0.0003
   commitment_cost: 0.25
-  num_embedding: 512
-  num_hidden: 128
-  res_layer: 2
-  res_hidden: 32
-  batch_size: 128
-  num_epochs: 500
+  num_embedding: 1024       
+  num_hidden: 128           
+  res_layer: 4
+  res_hidden: 32            
+  batch_size: 128           
+  num_epochs: 5             # Training baseline for memory optimization
+  mse_weight: 1.0
+  l1_weight: 0.8
+  add_noise: true
 
-memory_config: # Transformer/MinGPT
-  grid_latent_dim: [24, 32]
+memory_config:  # Parallel Spatial Dynamics (Optimized for 20 Epochs)
+  grid_latent_dim: [24, 32] # Latent grid H x W from VQ-VAE
   action_dim: 22
-  learning_rate: 0.0003
-  block_size: 1537
-  num_layers: 4  # Reduced from 6 to 4 for faster training
-  num_heads: 4
-  vocab_size: 512 # Codebook size from VAE
-  n_emb: 64
-  dropout: 0.1
-  batch_size: 32  # Reduced from 64 to fit in 4GB GPU
-  num_epochs: 200
+  learning_rate: 0.002      # Increased from 0.001 for faster convergence
+  context_frames: 4
+  embed_dim: 128            # Match vision latent_dim
+  hidden_dim: 256           # Reduced from 512
+  num_res_blocks: 4         # Reduced from 6
+  vocab_size: 1024          # Must match vision_config.num_embedding
+  batch_size: 64            # Increased from 32
+  use_qat: true
+  num_epochs: 20            # Target epoch count
 
+
+dreaming_config:
+  vision_checkpoint:  "checkpoints/vision/best_model"
+  memory_checkpoint:  "checkpoints/memory/best_memory_model"
+  temperature: 1.0          # Sampling temperature (1.0 = neutral, <1 = more confident)
+  top_k: 50                 # Top-k sampling (None = full softmax)
+  save_path: null           # null = display only via OpenCV; set a path to also save video
+  seed_file: null           # null = random seed tokens; or path to .npz for a real-frame seed
+  seed_frames: 4            # Number of real frames to use as seed context
+  display_scale: 2          # Upscale factor for OpenCV window (1 = native 256x192)

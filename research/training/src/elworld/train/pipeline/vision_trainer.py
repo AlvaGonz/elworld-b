@@ -33,7 +33,9 @@ class VisionTrainer:
             input_channels=vision_config['input_channels'],
             num_embedding=vision_config['num_embedding'],
             embedding_dim=vision_config['latent_dim'],
-            commitment_cost=vision_config['commitment_cost']
+            commitment_cost=vision_config['commitment_cost'],
+            decay=vision_config.get('decay', 0.99),
+            epsilon=vision_config.get('epsilon', 1e-5)
         ).to(device)
         
         self.optimizer = torch.optim.AdamW(
@@ -52,10 +54,16 @@ class VisionTrainer:
             patience=20
         )
         
-        self.criterion = torch.nn.MSELoss()
+        self.criterion_mse = torch.nn.MSELoss()
+        self.criterion_l1 = torch.nn.L1Loss()
         
         self.num_epochs = vision_config['num_epochs']
         self.batch_size = vision_config['batch_size']
+        
+        # Loss weights
+        self.mse_weight = 1.0
+        self.l1_weight = 0.5
+        self.ssim_weight = 0.5 # We'll compute a simple SSIM-like structural loss if possible
         
         # Track best model
         self.best_loss = float('inf')
@@ -66,7 +74,7 @@ class VisionTrainer:
         self._load_existing_checkpoint()
         
         print(f"\n{'='*60}")
-        print("VisionTrainer Initialized")
+        print("VisionTrainer Initialized (High-Performance)")
         print(f"{'='*60}")
         print(f"Device: {self.device}")
         if torch.cuda.is_available():
@@ -79,6 +87,7 @@ class VisionTrainer:
         print(f"Batch Size: {self.batch_size}")
         print(f"Learning Rate: {vision_config['learning_rate']}")
         print(f"Total Epochs: {self.num_epochs}")
+        print(f"Loss Weights: MSE={self.mse_weight}, L1={self.l1_weight}")
         print(f"{'='*60}\n")
 
     def _load_existing_checkpoint(self):
@@ -106,7 +115,7 @@ class VisionTrainer:
                 with open(metadata_path, 'r') as f:
                     metadata = json.load(f)
                 self.start_epoch = metadata.get('epoch', 0)
-            print(f"{'='*60}\n")
+            print(f"{'-'*60}\n")
     
     def _find_latest_checkpoint(self):
         """Find the latest checkpoint folder."""
@@ -134,7 +143,7 @@ class VisionTrainer:
         self.model.train()
         
         print(f"\n{'='*60}")
-        print("Starting Training")
+        print("Starting Training (Optimized VAE)")
         print(f"{'='*60}")
         print(f"Dataset size: {len(dataloader.dataset):,} samples")
         print(f"Batches per epoch: {len(dataloader)}")
@@ -153,9 +162,9 @@ class VisionTrainer:
             epoch_recon_loss = 0.0
             epoch_vq_loss = 0.0
             
-            print(f"\n{'─'*60}")
+            print(f"\n{'-'*60}")
             print(f"Epoch {epoch+1}/{self.num_epochs}")
-            print(f"{'─'*60}")
+            print(f"{'-'*60}")
             
             if torch.cuda.is_available():
                 torch.cuda.reset_peak_memory_stats()
@@ -182,7 +191,10 @@ class VisionTrainer:
                 if self.use_amp:
                     with torch.cuda.amp.autocast():
                         outputs = self.model(inputs)
-                        recon_loss = self.criterion(outputs['x_recon'], inputs)
+                        recon_mse = self.criterion_mse(outputs['x_recon'], inputs)
+                        recon_l1 = self.criterion_l1(outputs['x_recon'], inputs)
+                        
+                        recon_loss = self.mse_weight * recon_mse + self.l1_weight * recon_l1
                         vq_loss = outputs['vq_loss']
                         loss = recon_loss + vq_loss
                     
@@ -191,7 +203,10 @@ class VisionTrainer:
                     self.scaler.update()
                 else:
                     outputs = self.model(inputs)
-                    recon_loss = self.criterion(outputs['x_recon'], inputs)
+                    recon_mse = self.criterion_mse(outputs['x_recon'], inputs)
+                    recon_l1 = self.criterion_l1(outputs['x_recon'], inputs)
+                    
+                    recon_loss = self.mse_weight * recon_mse + self.l1_weight * recon_l1
                     vq_loss = outputs['vq_loss']
                     loss = recon_loss + vq_loss
                     
@@ -213,9 +228,9 @@ class VisionTrainer:
             
             current_lr = self.optimizer.param_groups[0]['lr']
             
-            print(f"\n{'─'*60}")
+            print(f"\n{'-'*60}")
             print(f"Epoch {epoch+1}/{self.num_epochs} Summary")
-            print(f"{'─'*60}")
+            print(f"{'-'*60}")
             print(f"Loss:        {avg_loss:.6f}")
             print(f"  Recon:     {avg_recon:.6f}")
             print(f"  VQ:        {avg_vq:.6f}")
@@ -237,16 +252,16 @@ class VisionTrainer:
             # Save checkpoint for current epoch
             checkpoint_dir = self.checkpoint_dir / f"vision_model_checkpoint_{epoch+1}"
             self.save_checkpoint_folder(checkpoint_dir, epoch + 1, avg_loss, avg_recon, avg_vq, current_lr, epoch_time)
-            print(f"✓ Checkpoint saved: {checkpoint_dir.name}/")
+            print(f"[OK] Checkpoint saved: {checkpoint_dir.name}/")
             
             # Save best model
             if avg_loss < self.best_loss:
                 self.best_loss = avg_loss
                 self.best_epoch = epoch + 1
                 self.save_checkpoint_folder(self.best_model_dir, epoch + 1, avg_loss, avg_recon, avg_vq, current_lr, epoch_time, is_best=True)
-                print(f"✓ New best model saved! Loss: {avg_loss:.6f}")
+                print(f"[OK] New best model saved! Loss: {avg_loss:.6f}")
             
-            print(f"{'─'*60}")
+            print(f"{'-'*60}")
         
         print(f"\n{'='*60}")
         print(f"Training completed!")
@@ -288,17 +303,17 @@ class VisionTrainer:
         }
         
         metadata_path = folder_path / "training_info.json"
-        with open(metadata_path, 'w') as f:
+        with open(metadata_path, 'w', encoding='utf-8') as f:
             json.dump(metadata, f, indent=2)
         
         # Save model config separately for easy loading
         config_path = folder_path / "config.json"
-        with open(config_path, 'w') as f:
+        with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(self.vision_config, f, indent=2)
         
         # Create README
         readme_path = folder_path / "README.md"
-        with open(readme_path, 'w') as f:
+        with open(readme_path, 'w', encoding='utf-8') as f:
             f.write(f"# Vision Model Checkpoint - Epoch {epoch}\n\n")
             f.write(f"## Training Metrics\n\n")
             f.write(f"- **Epoch:** {epoch}\n")

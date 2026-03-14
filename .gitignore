@@ -1,6 +1,7 @@
 *.npz
 *.mp4
 venv
+.venv
 __pycache__
 vision_model_checkpoint_*
 memory_model_checkpoint_*

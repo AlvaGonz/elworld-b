@@ -113,9 +113,6 @@ def get_game_region():
         print("💡 Set USE_AUTO_DETECT = False and use MANUAL_REGION")
         return None
 
-def get_action_vector():
-    return [1 if keyboard.is_pressed(k) else 0 for k in KEYS_TO_LOG]
-
 def collect_single_gameplay(gameplay_num, max_steps=None):
     """Record a single gameplay session"""
     if max_steps is None:

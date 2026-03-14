@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+import torch.ao.quantization as quant
 
 from elworld.model.architectures.memory.transformer_block import TransformerBlock
 from elworld.model.architectures.memory.ff_norm import LayerNorm
@@ -47,38 +49,36 @@ class MinGPT(nn.Module):
         self.action_dim = action_dim
         
         # Token embeddings: map token IDs to vectors
-        self.token_embedding = nn.Embedding(vocab_size, n_emb)
+        self.tok_emb = nn.Embedding(vocab_size, n_emb)
         
         # Positional embeddings: learned position encodings
-        self.position_embedding = nn.Embedding(block_size, n_emb)
+        self.pos_emb = nn.Embedding(block_size, n_emb)
         
         # Action conditioning (optional)
         if action_dim is not None:
-            self.action_embedding = nn.Linear(action_dim, n_emb)
+            self.action_proj = nn.Linear(action_dim, n_emb)
         
         # Input dropout
-        self.dropout = nn.Dropout(dropout)
+        self.drop = nn.Dropout(dropout)
         
         # Transformer blocks
-        self.blocks = nn.ModuleList([
-            TransformerBlock(
-                n_emb=n_emb,
-                num_heads=num_heads,
-                block_size=block_size,
-                dropout=dropout
-            )
+        self.blocks = nn.Sequential(*[
+            TransformerBlock(n_emb, num_heads, block_size, dropout)
             for _ in range(num_layers)
         ])
         
         # Final layer norm
-        self.ln_f = LayerNorm(n_emb)
+        self.ln_f = nn.LayerNorm(n_emb)
         
-        # Output head: predict next token logits
+        # Output projection head to vocabulary size
         self.head = nn.Linear(n_emb, vocab_size, bias=False)
         
-        # Weight tying: share weights between token embedding and output head
-        # This reduces parameters and often improves performance
-        self.head.weight = self.token_embedding.weight
+        # Tie the weights between embedding and output head (saves parameters, often improves performance)
+        self.tok_emb.weight = self.head.weight
+
+        # Quantization stubs
+        self.quant = quant.QuantStub()
+        self.dequant = quant.DeQuantStub()
         
         # Initialize weights
         self.apply(self._init_weights)
@@ -93,7 +93,7 @@ class MinGPT(nn.Module):
                 torch.nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
-        elif isinstance(module, LayerNorm):
+        elif isinstance(module, LayerNorm) or isinstance(module, nn.LayerNorm): # Added nn.LayerNorm for consistency
             torch.nn.init.ones_(module.weight)
             if module.bias is not None:
                 torch.nn.init.zeros_(module.bias)
@@ -117,14 +117,14 @@ class MinGPT(nn.Module):
         assert T <= self.block_size, f"Sequence length {T} exceeds block_size {self.block_size}"
         
         # Token embeddings: [B, T] -> [B, T, n_emb]
-        tok_emb = self.token_embedding(idx)
+        tok_emb = self.tok_emb(idx)
         
         # Position embeddings: [T] -> [T, n_emb] -> [1, T, n_emb]
         pos = torch.arange(0, T, dtype=torch.long, device=idx.device)
-        pos_emb = self.position_embedding(pos).unsqueeze(0)
+        pos_emb = self.pos_emb(pos).unsqueeze(0)  # [1, T, C]
         
-        # Combine token and position embeddings
-        x = tok_emb + pos_emb  # [B, T, n_emb]
+        # Combine embeddings
+        x = tok_emb + pos_emb
         
         # Add action conditioning if provided
         if actions is not None and self.action_dim is not None:
@@ -132,29 +132,33 @@ class MinGPT(nn.Module):
             # - [B, action_dim]: single action per sequence -> expand to all positions
             # - [B, T, action_dim]: action per token position
             if actions.dim() == 2:  # [B, action_dim]
-                act_emb = self.action_embedding(actions)  # [B, n_emb]
+                act_emb = self.action_proj(actions)  # [B, n_emb]
                 act_emb = act_emb.unsqueeze(1).expand(-1, T, -1)  # [B, T, n_emb]
             else:  # [B, T, action_dim]
-                act_emb = self.action_embedding(actions)  # [B, T, n_emb]
+                act_emb = self.action_proj(actions)  # [B, T, n_emb]
             x = x + act_emb
-        
-        # Dropout
-        x = self.dropout(x)
+
+        # QAT: Quantize inputs before transformer blocks
+        x = self.quant(x)
+            
+        x = self.drop(x)
         
         # Pass through transformer blocks
         for block in self.blocks:
             x = block(x)
-        
-        # Final layer norm
+            
         x = self.ln_f(x)
-        
-        # Predict next token logits
+
+        # Output linear head
         logits = self.head(x)  # [B, T, vocab_size]
+
+        # QAT: Dequantize outputs back to fp32/16
+        logits = self.dequant(logits)
         
-        # Compute loss if targets provided
+        # Calculate loss if targets are provided
         if targets is not None:
             # Reshape for cross-entropy: (B*T, vocab_size) and (B*T,)
-            loss = nn.functional.cross_entropy(
+            loss = F.cross_entropy(
                 logits.view(-1, logits.size(-1)),
                 targets.view(-1),
                 ignore_index=-1  # Ignore padding tokens if any
@@ -185,7 +189,12 @@ class MinGPT(nn.Module):
             # Get action for current step if provided
             action_cond = None
             if actions is not None and self.action_dim is not None:
-                action_cond = actions[:, :idx_cond.size(1)]
+                # If actions are provided for the full generation length, slice them
+                # Otherwise, assume actions are for the current context or single action
+                if actions.dim() == 3: # [B, total_gen_len, action_dim]
+                    action_cond = actions[:, :idx_cond.size(1)]
+                elif actions.dim() == 2: # [B, action_dim]
+                    action_cond = actions # Will be expanded in forward
             
             # Forward pass
             logits = self(idx_cond, actions=action_cond)
@@ -212,3 +221,12 @@ class MinGPT(nn.Module):
     def get_num_params(self):
         """Return the number of parameters in the model."""
         return sum(p.numel() for p in self.parameters())
+        
+    def prepare_qat(self):
+        """Prepare the model for Quantization-Aware Training (QAT)."""
+        self.train()
+        # fbgemm is standard for server/x86 INT8 inference.
+        # qnnpack is for ARM/mobile.
+        self.qconfig = quant.get_default_qat_qconfig('fbgemm')
+        quant.prepare_qat(self, inplace=True)
+        print("  [OK] Model prepared for QAT (Quantization-Aware Training).")

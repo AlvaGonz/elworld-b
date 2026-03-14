@@ -62,20 +62,15 @@ class MaskedMultiHeadAttention(nn.Module):
         k = k.view(B, T, self.num_heads, self.head_dim).transpose(1, 2)
         v = v.view(B, T, self.num_heads, self.head_dim).transpose(1, 2)
         
-        # Compute attention scores
-        # att = (Q @ K^T) / sqrt(d_k)
-        att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))  # [B, num_heads, T, T]
-        
-        # Apply causal mask (prevent attending to future)
-        att = att.masked_fill(self.mask[:, :, :T, :T] == 0, float('-inf'))
-        
-        # Softmax and dropout
-        att = F.softmax(att, dim=-1)
-        att = self.attn_dropout(att)
-        
-        # Apply attention to values
-        y = att @ v  # [B, num_heads, T, head_dim]
-        
+        # Use PyTorch native scaled_dot_product_attention (Flash Attention / Memory Efficient Attention)
+        # It natively handles causality and dropout, ignoring the manual `self.mask` buffer.
+        y = F.scaled_dot_product_attention(
+            q, k, v, 
+            attn_mask=None, 
+            dropout_p=self.attn_dropout.p if self.training else 0.0, 
+            is_causal=True
+        )
+
         # Reassemble all head outputs side by side
         y = y.transpose(1, 2).contiguous().view(B, T, C)  # [B, T, C]
         

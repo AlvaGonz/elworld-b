@@ -3,7 +3,7 @@ numpy
 opencv-python
 keyboard
 pygetwindow
-torch
 scikit-learn
 accelerate
-cv2
+pyyaml
+tqdm

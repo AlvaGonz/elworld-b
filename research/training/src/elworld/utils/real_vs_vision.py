@@ -41,7 +41,9 @@ def load_vision_model(checkpoint_path, device='cuda'):
         input_channels=vision_config['input_channels'],
         num_embedding=vision_config['num_embedding'],
         embedding_dim=vision_config['latent_dim'],
-        commitment_cost=vision_config['commitment_cost']
+        commitment_cost=vision_config['commitment_cost'],
+        decay=vision_config.get('decay', 0.99),
+        epsilon=vision_config.get('epsilon', 1e-5)
     ).to(device)
     
     # Load weights
@@ -52,7 +54,7 @@ def load_vision_model(checkpoint_path, device='cuda'):
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
     
-    print(f"✓ Model loaded from {checkpoint_path}")
+    print(f"[OK] Model loaded from {checkpoint_path}")
     print(f"  Latent dim: {vision_config['latent_dim']}")
     print(f"  Num embeddings: {vision_config['num_embedding']}")
     
@@ -149,7 +151,7 @@ def extract_video(
             
             # Create side-by-side comparison
             # Left: actual, Right: reconstructed
-            combined_frame = np.concatenate([actual_frame, reconstructed], axis=1)
+            combined_frame = np.ascontiguousarray(np.concatenate([actual_frame, reconstructed], axis=1))
             
             # Add labels
             font = cv2.FONT_HERSHEY_SIMPLEX
@@ -175,7 +177,7 @@ def extract_video(
     data.close()
     
     print(f"\n{'='*60}")
-    print(f"✅ Video created successfully!")
+    print(f"[OK] Video created successfully!")
     print(f"{'='*60}")
     print(f"Output: {output_path}")
     print(f"Frames: {num_frames}")
