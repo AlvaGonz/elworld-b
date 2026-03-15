@@ -1,0 +1,71 @@
+
+============================================================
+  Elworld Trainer  |  mode=VISION  |  device=cuda
+  GPU: Tesla M40 24GB  |  VRAM: 22.4 GB
+============================================================
+
+
+============================================================
+  Training Vision Model (VQ-VAE)
+============================================================
+[INFO] Loading 5 .npz file(s) from /home/viethq/Projects/elworld/research/training/recorded/ ...
+Loading Data:   0%|          | 0/5 [00:00<?, ?it/s]Loading Data:  20%|██        | 1/5 [00:02<00:10,  2.54s/it]Loading Data:  40%|████      | 2/5 [00:05<00:07,  2.58s/it]Loading Data:  60%|██████    | 3/5 [00:07<00:05,  2.57s/it]Loading Data:  80%|████████  | 4/5 [00:10<00:02,  2.59s/it]Loading Data: 100%|██████████| 5/5 [00:13<00:00,  2.68s/it]Loading Data: 100%|██████████| 5/5 [00:13<00:00,  2.63s/it]
+  [OK] Frames loaded : 18,797
+/home/viethq/Projects/elworld/research/training/src/elworld/train/pipeline/vision_trainer.py:47: FutureWarning: `torch.cuda.amp.GradScaler(args...)` is deprecated. Please use `torch.amp.GradScaler('cuda', args...)` instead.
+  self.scaler = torch.cuda.amp.GradScaler() if self.use_amp else None
+/home/viethq/Projects/elworld/research/training/src/elworld/train/pipeline/vision_trainer.py:346: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  self.model.load_state_dict(torch.load(model_path, map_location=self.device))
+/home/viethq/Projects/elworld/research/training/src/elworld/train/pipeline/vision_trainer.py:351: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  self.optimizer.load_state_dict(torch.load(optimizer_path, map_location=self.device))
+/home/viethq/Projects/elworld/research/training/src/elworld/train/pipeline/vision_trainer.py:356: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  self.scheduler.load_state_dict(torch.load(scheduler_path, map_location=self.device))
+Vision DataLoader ready - 18,797 frames | 147 batches | bs=128 | noise=True
+
+============================================================
+Found existing checkpoint: vision_model_checkpoint_2
+============================================================
+Checkpoint loaded from checkpoints/vision/vision_model_checkpoint_2
+  Epoch: 2
+  Loss: 0.13283228205174816
+  Best Loss: 0.130810 (epoch 2)
+------------------------------------------------------------
+
+
+============================================================
+VisionTrainer Initialized (High-Performance)
+============================================================
+Device: cuda
+GPU: Tesla M40 24GB
+CUDA Version: 12.1
+GPU Memory: 22.40 GB
+AMP (Mixed Precision): Enabled
+Model Parameters: 961,804
+Trainable Parameters: 961,804
+Batch Size: 128
+Learning Rate: 0.00018638933428187984
+Total Epochs: 20
+Loss Weights: MSE=1.0, L1=0.5
+============================================================
+
+
+============================================================
+Starting Training (Optimized VAE)
+============================================================
+Dataset size: 18,797 samples
+Batches per epoch: 147
+Samples per batch: 128
+Total iterations: 2,940
+Checkpoint dir: checkpoints/vision
+Saving: Every epoch + best model
+Resuming from epoch: 2
+Best loss so far: 0.130810 (epoch 2)
+============================================================
+
+
+------------------------------------------------------------
+Epoch 3/20
+------------------------------------------------------------
+GPU Memory (start): 9.90 MB
+Training:   0%|          | 0/147 [00:00<?, ?it/s]/home/viethq/Projects/elworld/research/training/src/elworld/train/pipeline/vision_trainer.py:192: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with torch.cuda.amp.autocast():
+Training:   1%|          | 1/147 [00:01<02:38,  1.08s/it]Training:   1%|▏         | 2/147 [00:01<02:20,  1.03it/s]Training:   2%|▏         | 3/147 [00:02<02:17,  1.05it/s]Training:   3%|▎         | 4/147 [00:03<02:13,  1.07it/s]Training:   3%|▎         | 5/147 [00:04<02:09,  1.10it/s]Training:   4%|▍         | 6/147 [00:05<02:08,  1.10it/s]Training:   5%|▍         | 7/147 [00:06<02:08,  1.09it/s]Training:   5%|▌         | 8/147 [00:07<02:07,  1.09it/s]Training:   6%|▌         | 9/147 [00:08<02:05,  1.10it/s]Training:   7%|▋         | 10/147 [00:09<02:03,  1.11it/s]Training:   7%|▋         | 11/147 [00:10<02:01,  1.12it/s]Training:   8%|▊         | 12/147 [00:10<02:00,  1.12it/s]Training:   9%|▉         | 13/147 [00:11<01:59,  1.12it/s]Training:  10%|▉         | 14/147 [00:12<01:58,  1.12it/s]Training:  10%|█         | 15/147 [00:13<01:57,  1.13it/s]Training:  11%|█         | 16/147 [00:14<01:57,  1.12it/s]Training:  12%|█▏        | 17/147 [00:15<01:56,  1.12it/s]Training:  12%|█▏        | 18/147 [00:16<01:55,  1.12it/s]Training:  13%|█▎        | 19/147 [00:17<01:54,  1.12it/s]Training:  14%|█▎        | 20/147 [00:18<01:53,  1.12it/s]Training:  14%|█▍        | 21/147 [00:19<01:53,  1.11it/s]Training:  15%|█▍        | 22/147 [00:19<01:52,  1.11it/s]Training:  16%|█▌        | 23/147 [00:20<01:51,  1.11it/s]Training:  16%|█▋        | 24/147 [00:21<01:50,  1.11it/s]Training:  17%|█▋        | 25/147 [00:22<01:49,  1.11it/s]Training:  18%|█▊        | 26/147 [00:23<01:49,  1.11it/s]Training:  18%|█▊        | 27/147 [00:24<01:48,  1.10it/s]Training:  19%|█▉        | 28/147 [00:25<01:48,  1.10it/s]Training:  20%|█▉        | 29/147 [00:26<01:47,  1.09it/s]Training:  20%|██        | 30/147 [00:27<01:47,  1.09it/s]Training:  21%|██        | 31/147 [00:28<01:46,  1.09it/s]Training:  22%|██▏       | 32/147 [00:29<01:46,  1.08it/s]Training:  22%|██▏       | 33/147 [00:30<01:46,  1.07it/s]Training:  23%|██▎       | 34/147 [00:31<01:47,  1.06it/s]Training:  24%|██▍       | 35/147 [00:31<01:46,  1.06it/s]Training:  24%|██▍       | 36/147 [00:32<01:46,  1.04it/s]Training:  25%|██▌       | 37/147 [00:33<01:46,  1.03it/s]Training:  26%|██▌       | 38/147 [00:34<01:47,  1.02it/s]Training:  27%|██▋       | 39/147 [00:36<01:48,  1.00s/it]Training:  27%|██▋       | 40/147 [00:37<01:49,  1.02s/it]Training:  28%|██▊       | 41/147 [00:38<01:50,  1.04s/it]Training:  29%|██▊       | 42/147 [00:39<01:50,  1.05s/it]Training:  29%|██▉       | 43/147 [00:40<01:51,  1.07s/it]Training:  30%|██▉       | 44/147 [00:41<01:50,  1.07s/it]Training:  31%|███       | 45/147 [00:42<01:49,  1.08s/it]Training:  31%|███▏      | 46/147 [00:43<01:49,  1.08s/it]Training:  32%|███▏      | 47/147 [00:44<01:48,  1.08s/it]Training:  33%|███▎      | 48/147 [00:45<01:47,  1.09s/it]

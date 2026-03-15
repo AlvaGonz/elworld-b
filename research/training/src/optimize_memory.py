@@ -14,6 +14,12 @@ from elworld.train.pipeline.memory_trainer import MemoryTrainer
 from elworld.preprocess.data_setup import setup_data
 from utils import load_config, get_general_config, get_vision_config, get_memory_config
 
+# Path setup
+SCRIPT_DIR = Path(__file__).parent.absolute()
+CONFIG_PATH = SCRIPT_DIR / "config.yaml"
+OUTPUT_DIR = SCRIPT_DIR / "outputs" / "optuna"
+CHECKPOINT_ROOT = SCRIPT_DIR / "checkpoints" / "optuna_memory"
+
 # Global data loader to avoid re-encoding every trial
 global_loader = None
 
@@ -21,6 +27,10 @@ def get_loader(vision_config, memory_config, general_config):
     global global_loader
     if global_loader is None:
         data_path = general_config.get("data_path", "../recorded")
+        # Add vision_checkpoint_path to general_config for data_setup to use
+        vision_ckpt = general_config.get("vision_checkpoint_path")
+        general_config["vision_checkpoint_path"] = vision_ckpt
+
         global_loader = setup_data(
             mode="memory",
             data_path=data_path,
@@ -32,20 +42,23 @@ def get_loader(vision_config, memory_config, general_config):
 
 def objective(trial):
     # Load base config
-    config_path = "config.yaml"
-    config = load_config(config_path)
+    config = load_config(str(CONFIG_PATH))
     general_config = get_general_config(config)
     vision_config = get_vision_config(config).copy()
     memory_config = get_memory_config(config).copy()
 
     # Apply best vision params
-    best_vision_params_path = Path("outputs/optuna/best_vision_params.json")
+    best_vision_params_path = OUTPUT_DIR / "best_vision_params.json"
     if best_vision_params_path.exists():
         with open(best_vision_params_path, "r") as f:
             best_vision_params = json.load(f)
         vision_config.update(best_vision_params)
         memory_config['vocab_size'] = vision_config['num_embedding']
         memory_config['embed_dim'] = vision_config['latent_dim']
+    
+    # Ensure vision_checkpoint_path is in general_config
+    if "vision_checkpoint" in config.get("dreaming_config", {}):
+        general_config["vision_checkpoint_path"] = config["dreaming_config"]["vision_checkpoint"]
 
     # Suggest hyperparameters
     memory_config['learning_rate'] = trial.suggest_float('learning_rate', 5e-4, 5e-3, log=True)
@@ -53,7 +66,7 @@ def objective(trial):
     memory_config['num_epochs'] = 5 
     
     # Use a unique checkpoint dir for each trial
-    trial_dir = Path(f"checkpoints/optuna_memory/trial_{trial.number}")
+    trial_dir = CHECKPOINT_ROOT / f"trial_{trial.number}"
     if trial_dir.exists():
         shutil.rmtree(trial_dir)
     trial_dir.mkdir(parents=True, exist_ok=True)
@@ -99,6 +112,7 @@ def objective(trial):
             epoch_loss += loss.item()
         
         avg_loss = epoch_loss / len(loader)
+        print(f"  [Trial {trial.number}] Epoch {epoch+1}/{memory_config['num_epochs']} - Loss: {avg_loss:.6f}")
         trial.report(avg_loss, epoch)
 
         if trial.should_prune():
@@ -120,8 +134,7 @@ def objective(trial):
     return best_loss
 
 if __name__ == "__main__":
-    study_dir = Path("outputs/optuna")
-    study_dir.mkdir(parents=True, exist_ok=True)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     
     study = optuna.create_study(
         direction="minimize",
@@ -134,5 +147,5 @@ if __name__ == "__main__":
     print(f"  Value: {trial.value}")
     print(f"  Params: {trial.params}")
     
-    with open(study_dir / "best_memory_params.json", "w") as f:
+    with open(OUTPUT_DIR / "best_memory_params.json", "w") as f:
         json.dump(trial.params, f, indent=4)

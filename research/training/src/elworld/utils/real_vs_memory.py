@@ -99,6 +99,13 @@ def evaluate_memory(
 
     # Load data
     obs, acts = load_npz_files(data_path, max_files=1)
+    
+    # Ensure they are numpy arrays (load_npz_files might return list of arrays)
+    if isinstance(obs, list):
+        obs = np.concatenate(obs, axis=0)
+    if isinstance(acts, list):
+        acts = np.concatenate(acts, axis=0)
+
     obs = obs[:max_frames]
     acts = acts[:max_frames]
 

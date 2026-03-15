@@ -188,8 +188,8 @@ class Trainer:
         elif self.mode == "dreaming":
             self.run_dreaming()
         elif self.mode == "demo_vision":
-            self.extract_vision_video(max_frames=500)
+            self.extract_vision_video(max_frames=1500)
         elif self.mode == "demo_memory":
-            self.extract_memory_video(max_frames=200)
+            self.extract_memory_video(max_frames=1500)
 
         print(f"\n{'='*60}\n  Task complete! [OK]\n{'='*60}\n")

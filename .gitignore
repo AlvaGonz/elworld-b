@@ -1,5 +1,4 @@
 *.npz
-*.mp4
 venv
 .venv
 __pycache__

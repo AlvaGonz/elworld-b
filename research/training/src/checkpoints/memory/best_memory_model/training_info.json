@@ -1,0 +1,26 @@
+{
+  "epoch": 2,
+  "loss": 0.4706726954096839,
+  "learning_rate": 0.0008240639038179593,
+  "epoch_time": 240.06684255599976,
+  "best_loss": 0.4706726954096839,
+  "best_epoch": 2,
+  "is_best": true,
+  "timestamp": "2026-03-15T04:09:21.341906",
+  "config": {
+    "action_dim": 22,
+    "batch_size": 64,
+    "context_frames": 4,
+    "embed_dim": 128,
+    "grid_latent_dim": [
+      24,
+      32
+    ],
+    "hidden_dim": 256,
+    "learning_rate": 0.0008240639038179593,
+    "num_epochs": 20,
+    "num_res_blocks": 4,
+    "use_qat": true,
+    "vocab_size": 1024
+  }
+}

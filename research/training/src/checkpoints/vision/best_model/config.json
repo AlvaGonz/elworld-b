@@ -1,20 +1,20 @@
 {
+  "add_noise": true,
+  "batch_size": 128,
+  "commitment_cost": 0.25,
+  "dropout_rate": 0.1,
   "input_channels": 3,
-  "latent_dim": 64,
   "input_size": [
     256,
     192
   ],
-  "dropout_rate": 0.1,
-  "learning_rate": 0.00018638933428187984,
-  "commitment_cost": 0.25,
-  "num_embedding": 1024,
-  "num_hidden": 128,
-  "res_layer": 4,
-  "res_hidden": 32,
-  "batch_size": 128,
-  "num_epochs": 5,
-  "mse_weight": 1.0,
   "l1_weight": 0.8,
-  "add_noise": true
+  "latent_dim": 64,
+  "learning_rate": 0.00018638933428187984,
+  "mse_weight": 1.0,
+  "num_embedding": 1024,
+  "num_epochs": 20,
+  "num_hidden": 128,
+  "res_hidden": 32,
+  "res_layer": 4
 }

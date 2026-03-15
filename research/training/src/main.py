@@ -1,11 +1,17 @@
+import argparse
 import torch
 from elworld.train.trainer import Trainer
 
 if __name__ == "__main__":
-    # ============= CONFIGURE HERE =============
-    mode = "vision"  # "vision" | "memory" | "control" | "dreaming" | "demo_vision" | "demo_memory"
-    config_path = "config.yaml"
-    device = "cuda"  # "cuda" | "cpu" | None (auto)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--mode", type=str, default="vision", choices=["vision", "memory", "control", "dreaming", "demo_vision", "demo_memory"])
+    parser.add_argument("--config", type=str, default="config.yaml")
+    parser.add_argument("--device", type=str, default="cuda")
+    args = parser.parse_args()
+
+    mode = args.mode
+    config_path = args.config
+    device = args.device
 
     # Only used in demo_vision and demo_memory modes:
     video_config = {

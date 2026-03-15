@@ -59,7 +59,9 @@ def setup_memory_data(
       3. Free encoder from GPU
       4. Return DataLoader over token sequences
     """
-    checkpoint_path = "checkpoints/vision/best_model"
+    checkpoint_path = general_config.get("vision_checkpoint_path")
+    if not checkpoint_path:
+        checkpoint_path = "checkpoints/vision/best_model"
 
     dataset = MemoryDataset(
         data_dir=data_path,
